@@ -3,8 +3,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#define SOBELX 1
+#define SOBELY 0
 
 float minmax(float *img_array, int height, int width, int option);
+void gaussianfilter(int *src, float *dst, int image_height, int image_width);
+void sobelfilter(float *src, float *dst, int image_height, int image_width, int direction, CvMat *sobelimg);
 
 int main()
 {
@@ -63,6 +67,8 @@ int main()
 
  fclose(temp);
  */
+
+
  // ----------------------------
  // Calculating derivatives in x- and y-directions using Sobel
 
@@ -86,85 +92,11 @@ int main()
  fclose(temp);
 
  CvMat *sobelimg = cvCreateMat(input_image->height, input_image->width, CV_8U);
- CvMat *gaussianimg = cvCreateMat(input_image->height, input_image->width, CV_8U);
 
- int sobelx[3][3] = {-1, 0, 1, -2, 0, 2, -1, 0, 1};
- float gaussian[5][5] = {0.003765, 0.015019, 0.023792, 0.015019, 0.003765,
- 0.015019, 0.059912, 0.094907, 0.059912, 0.015019,
- 0.023792, 0.094907, 0.150342, 0.094907, 0.023792,
- 0.015019, 0.059912, 0.094907, 0.059912, 0.015019,
- 0.003765, 0.015019, 0.023792, 0.015019, 0.003765};
 
- int anchor;
+gaussianfilter(&img_data[0][0], &gaussian_image[0][0], input_image->height, input_image->width);
+sobelfilter(&gaussian_image[0][0], &sobel_image[0][0], input_image->height, input_image->width, SOBELX, sobelimg);
 
- for (int l = 0; l < input_image->height; l++)
-    {
-     for (int m = 0; m < input_image->width; m++)
-        {
-         anchor = 5/2;
-         if (l < anchor || m < anchor || l >  input_image->height-1-anchor || m > input_image->width-1-anchor)
-         {
-         gaussian_image[l][m] = img_data[l][m];
-         CV_MAT_ELEM(*gaussianimg, uchar, l, m) = img_data[l][m];
-         }
-         else
-         {
-          float sum = 0;
-          for (int g = anchor; g >= -anchor; g--)
-            {
-             for (int h = anchor; h >= -anchor; h--)
-             {
-              sum = sum + img_data[l-g][m-h]*gaussian[anchor-g][anchor-h];
-             }
-            }
-          gaussian_image[l][m] = sum;
-          CV_MAT_ELEM(*gaussianimg, uchar, l, m) = sum;
-         }
-        }
-    }
-
- printf("%f\n", minmax(gaussian_image, input_image->height, input_image->width, 1));
-
- for (int l = 0; l < input_image->height; l++)
-    {
-     for (int m = 0; m < input_image->width; m++)
-        {
-         anchor = 3/2;
-         if (l < anchor || m < anchor || l >  input_image->height-1-anchor || m > input_image->width-1-anchor)
-         {
-         sobel_image[l][m] = 0;
-         }
-         else
-         {
-          float sum = 0;
-          for (int g = anchor; g >= -anchor; g--)
-            {
-             for (int h = anchor; h >= -anchor; h--)
-             {
-              sum = sum + gaussian_image[l-g][m-h]*sobelx[anchor-g][anchor-h];
-             }
-            }
-          sobel_image[l][m] = sum;
-         }
-        }
-    }
-
-float max_sobel = minmax(sobel_image, input_image->height, input_image->width, 1);
-float min_sobel = minmax(sobel_image, input_image->height, input_image->width, 0);
-
-for (int g = 0; g <= input_image->height-1; g++)
-    {
-     for (int h = 0; h<= input_image->width-1; h++)
-        {
-         sobel_image[g][h] = (abs(sobel_image[g][h])/max_sobel)*255.0;
-         CV_MAT_ELEM(*sobelimg, uchar, g, h) = sobel_image[g][h];
-        }
-    }
-
-max_sobel = minmax(sobel_image, input_image->height, input_image->width, 1);
-min_sobel = minmax(sobel_image, input_image->height, input_image->width, 0);
-
-printf("%f\t%f", max_sobel, min_sobel);
 
 IplImage *sobel_opencv = cvCloneImage(input_image);
 cvSobel(input_image, sobel_opencv, 1, 0, 3);
@@ -176,12 +108,10 @@ cvThreshold(sobelimg, threshold, 0.1, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
 cvNamedWindow("Sobel", CV_WINDOW_NORMAL);
 cvNamedWindow("Sobel OpenCV", CV_WINDOW_NORMAL);
 cvNamedWindow("Original", CV_WINDOW_NORMAL);
-cvNamedWindow("Gaussian", CV_WINDOW_NORMAL);
 cvNamedWindow("Threshold", CV_WINDOW_NORMAL);
 cvShowImage("Sobel", sobelimg);
 cvShowImage("Sobel OpenCV", sobel_opencv);
 cvShowImage("Original", input_image);
-cvShowImage("Gaussian", gaussianimg);
 cvShowImage("Threshold", threshold);
 cvWaitKey(0);
 return 0;
@@ -212,4 +142,88 @@ float minmax(float *img_array, int height, int width, int option)
     }
   }
  return val;
+}
+
+
+void gaussianfilter(int *src, float *dst, int image_height, int image_width)
+{
+ float gaussian[5][5] = {0.003765, 0.015019, 0.023792, 0.015019, 0.003765,
+ 0.015019, 0.059912, 0.094907, 0.059912, 0.015019,
+ 0.023792, 0.094907, 0.150342, 0.094907, 0.023792,
+ 0.015019, 0.059912, 0.094907, 0.059912, 0.015019,
+ 0.003765, 0.015019, 0.023792, 0.015019, 0.003765};
+
+ int anchor;
+
+ for (int l = 0; l < image_height; l++)
+    {
+     for (int m = 0; m < image_width; m++)
+        {
+         anchor = 5/2;
+         if (l < anchor || m < anchor || l >  image_height-1-anchor || m > image_width-1-anchor)
+         {
+         *(dst + l*image_width + m) = *(src + l*image_width + m);
+         }
+         else
+         {
+          float sum = 0;
+          for (int g = anchor; g >= -anchor; g--)
+            {
+             for (int h = anchor; h >= -anchor; h--)
+             {
+              sum = sum + (*(src + (l-g)*image_width + (m-h)))*(gaussian[anchor-g][anchor-h]);
+             }
+            }
+          *(dst + l*image_width + m) = sum;
+         }
+        }
+    }
+}
+
+
+void sobelfilter(float *src, float*dst, int image_height, int image_width, int direction, CvMat *sobelimg)
+{
+ int *sobel;
+
+ if(direction == 1)
+ {sobel = (int [3][3]){-1, 0, 1, -2, 0, 2, -1, 0, 1};}
+ else
+ {sobel = (int [3][3]){-1, -2, -1, 0, 0, 0, 1, 2, 1};}
+
+ int anchor;
+ for (int l = 0; l < image_height; l++)
+    {
+     for (int m = 0; m < image_width; m++)
+        {
+         anchor = 3/2;
+         if (l < anchor || m < anchor || l >  image_height-1-anchor || m > image_width-1-anchor)
+         {
+         *(dst + l*image_width + m) = 0;
+         }
+         else
+         {
+          float sum = 0;
+          for (int g = anchor; g >= -anchor; g--)
+            {
+             for (int h = anchor; h >= -anchor; h--)
+             {
+              sum = sum + (*(src + (l-g)*image_width + (m-h)))*(*(sobel + (anchor-g)*3 + (anchor-h)));
+             }
+            }
+          *(dst + l*image_width + m) = sum;
+         }
+        }
+    }
+
+  float max_sobel = minmax(dst, image_height, image_width, 1);
+
+  for (int g = 0; g <= image_height-1; g++)
+    {
+     for (int h = 0; h<= image_width-1; h++)
+        {
+         *(dst + g*image_width + h) = (abs(*(dst + g*image_width + h))/max_sobel)*255.0;
+         CV_MAT_ELEM(*sobelimg, uchar, g, h) = *(dst + g*image_width + h);
+        }
+    }
+
 }
